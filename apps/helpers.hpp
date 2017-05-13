@@ -38,6 +38,8 @@
 #include <algorithm>
 #include <iterator>
 #include <cassert>
+#include <iostream>
+
 
 /**
  * @brief Scales and translates a facebox. Useful for converting
@@ -126,9 +128,14 @@ cv::Rect make_bbox_square(cv::Rect bounding_box)
  * @param[in] colour Colour of the mesh to be drawn.
  */
 void draw_wireframe(cv::Mat image, const eos::render::Mesh& mesh, glm::mat4x4 modelview, glm::mat4x4 projection, glm::vec4 viewport, cv::Scalar colour = cv::Scalar(0, 255, 0, 255))
-{
+{   int i = 0;
+    float x_min =300.0;
+    float x_max =0.0;
+    float y_min =300.0;
+    float y_max =0.0;
+    
 	for (const auto& triangle : mesh.tvi)
-	{
+	{   
 		const auto p1 = glm::project({ mesh.vertices[triangle[0]][0], mesh.vertices[triangle[0]][1], mesh.vertices[triangle[0]][2] }, modelview, projection, viewport);
 		const auto p2 = glm::project({ mesh.vertices[triangle[1]][0], mesh.vertices[triangle[1]][1], mesh.vertices[triangle[1]][2] }, modelview, projection, viewport);
 		const auto p3 = glm::project({ mesh.vertices[triangle[2]][0], mesh.vertices[triangle[2]][1], mesh.vertices[triangle[2]][2] }, modelview, projection, viewport);
@@ -138,8 +145,147 @@ void draw_wireframe(cv::Mat image, const eos::render::Mesh& mesh, glm::mat4x4 mo
 			cv::line(image, cv::Point(p2.x, p2.y), cv::Point(p3.x, p3.y), colour);
 			cv::line(image, cv::Point(p3.x, p3.y), cv::Point(p1.x, p1.y), colour);
 		}
+        
+        //cout<<i<<" "<<"p1(x,y) = "<<p1.x<<p1.y<<endl;
+        //cout<<i<<" "<<"p2(x,y) = "<<p2.x<<p2.y<<endl;
+        //cout<<i<<" "<<"p3(x,y) = "<<p3.x<<p3.y<<endl;
+        x_min=(x_min>p1.x)?p1.x:x_min;
+        x_min=(x_min>p2.x)?p2.x:x_min;
+        x_min=(x_min>p3.x)?p3.x:x_min;
+        x_max=(x_max>p1.x)?x_max:p1.x;
+        x_max=(x_max>p2.x)?x_max:p2.x;
+        x_max=(x_max>p3.x)?x_max:p3.x;
+
+        y_min=(y_min>p1.y)?p1.y:y_min;
+        y_min=(y_min>p2.y)?p2.y:y_min;
+        y_min=(y_min>p3.y)?p3.y:y_min;
+        y_max=(y_max>p1.y)?y_max:p1.y;
+        y_max=(y_max>p2.y)?y_max:p2.y;
+        y_max=(y_max>p3.y)?y_max:p3.y;
+        
+        i = i+1;
 	}
+ 
 };
+
+
+
+
+cv::Mat composefront(cv::Mat image, const eos::render::Mesh& mesh, glm::mat4x4 modelview, glm::mat4x4 projection, glm::vec4 viewport, cv::Mat rendering )
+{   int i = 0;
+    float x_min =300.0;
+    float x_max =0.0;
+    float y_min =300.0;
+    float y_max =0.0;
+    
+	for (const auto& triangle : mesh.tvi)
+	{   
+		const auto p1 = glm::project({ mesh.vertices[triangle[0]][0], mesh.vertices[triangle[0]][1], mesh.vertices[triangle[0]][2] }, modelview, projection, viewport);
+		const auto p2 = glm::project({ mesh.vertices[triangle[1]][0], mesh.vertices[triangle[1]][1], mesh.vertices[triangle[1]][2] }, modelview, projection, viewport);
+		const auto p3 = glm::project({ mesh.vertices[triangle[2]][0], mesh.vertices[triangle[2]][1], mesh.vertices[triangle[2]][2] }, modelview, projection, viewport);
+		
+        x_min=(x_min>p1.x)?p1.x:x_min;
+        x_min=(x_min>p2.x)?p2.x:x_min;
+        x_min=(x_min>p3.x)?p3.x:x_min;
+        x_max=(x_max>p1.x)?x_max:p1.x;
+        x_max=(x_max>p2.x)?x_max:p2.x;
+        x_max=(x_max>p3.x)?x_max:p3.x;
+
+        y_min=(y_min>p1.y)?p1.y:y_min;
+        y_min=(y_min>p2.y)?p2.y:y_min;
+        y_min=(y_min>p3.y)?p3.y:y_min;
+        y_max=(y_max>p1.y)?y_max:p1.y;
+        y_max=(y_max>p2.y)?y_max:p2.y;
+        y_max=(y_max>p3.y)?y_max:p3.y;                
+	}
+    cv::Rect rect(x_min,y_min,x_max-x_min,y_max-y_min);
+    cv::Mat roiImage = image(rect);
+    //cv::rectangle(image, rect, { 255, 0, 0 });
+    //std::cout<<rendering.cols<<"..."<<rendering.rows<<std::endl;  256/256
+
+
+    // locate face in rendering by a rectangle
+    int row_min_dst = -1;
+    int row_max_dst = -1;
+    int col_min_dst = -1;
+    int col_max_dst = -1;
+/*
+    ///ต๗สิ
+    std::cout<<" once"<<std::endl;
+    for(int j = 0; j < rendering.cols; j++)  
+    {
+        cv::Point3_<uchar>* p = rendering.ptr<cv::Point3_<uchar> >(20,j);
+        int B = static_cast<int>(p->x);
+        int G = static_cast<int>(p->y);
+        int R = static_cast<int>(p->z);
+        
+        if(B*G*R) std::cout<<B <<" "<< G<<" "<< R <<" "<<"j = "<<j<<std::endl;
+        cv::line(rendering, cv::Point2f{ 20, 80 }, cv::Point2f{ 20, 180 }, { 255, 0, 0 });
+    }
+*/
+
+    
+
+    // get row_min and row_max
+    for(int i = 0; i < rendering.rows; i++)  
+    {  
+
+        for(int j = 0; j < rendering.cols; j++)  
+        {   
+            // get RBG value of every pixel
+            cv::Point3_<uchar>* p = rendering.ptr<cv::Point3_<uchar> >(i,j);
+            int B = static_cast<int>(p->x);
+            int G = static_cast<int>(p->y);
+            int R = static_cast<int>(p->z);
+            if(B*G*R>0 && row_min_dst==-1) row_min_dst = i;
+            if(row_min_dst>0 && row_max_dst==-1 && B*G*R>0) break; 
+            else if(j == rendering.cols-1 && row_min_dst>0 && row_max_dst==-1) row_max_dst = i;
+                 
+        }
+        if(row_min_dst>0 && row_max_dst>0) break;         
+    }
+
+    for(int j = 0; j < rendering.cols; j++)  
+    {  
+        for(int i = 0; i < rendering.rows; i++)  
+        {   
+            // get RBG value of every pixel
+            cv::Point3_<uchar>* p = rendering.ptr<cv::Point3_<uchar> >(i,j);
+            int B = static_cast<int>(p->x);
+            int G = static_cast<int>(p->y);
+            int R = static_cast<int>(p->z);
+            if(B*G*R>0 && col_min_dst==-1) col_min_dst = j;
+            if(col_min_dst>0 && col_max_dst==-1 && B*G*R>0) break; 
+            else if(i == rendering.rows-1 && col_max_dst==-1 && col_min_dst>0 ) col_max_dst = j;
+                  
+        }
+        if(col_max_dst>0 && col_min_dst>0 ) break;         
+    }
+    
+    
+    cv::Rect rect_dst(col_min_dst,row_min_dst,col_max_dst-col_min_dst,row_max_dst-row_min_dst);
+    cv::Mat face = rendering(rect_dst);
+    //face is BGRA image,convert to face_bgr(BGR);
+    cv::Mat face_bgr(face.rows,face.cols,CV_8UC3);
+    cv::Mat alpha( face.rows, face.cols, CV_8UC1 );
+    cv::Mat out[] = { face_bgr, alpha };
+    int from_to[] = { 0,0, 1,1, 2,2, 3,3 };
+    cv::mixChannels( &face, 1, out, 2, from_to, 4 );
+    cv::resize(face_bgr, face_bgr, roiImage.size());
+
+    //creat face_binary.it means the location in which R*G*B>0  
+    cv::Mat face_gray;
+    cv::Mat face_binary;
+    cv::cvtColor(face_bgr,face_gray,CV_RGB2GRAY);
+    face_binary = face_gray > 50;
+    face_bgr.copyTo(roiImage,face_binary); 
+    
+    //cv::addWeighted(roiImage,0.3,face_bgr,1.0,0.0,roiImage);
+    
+    return image;
+ 
+};
+
 
 /**
  * @brief Merges isomaps from a live video with a weighted averaging, based
@@ -158,7 +304,7 @@ public:
 	 * be able to add frames from a live video and merge them on-the-fly.
 	 *
 	 * The threshold means: Each triangle with a view angle smaller than the given angle will be used to merge.
-	 * The default threshold (90ฐ) means all triangles, as long as they're a little bit visible, are merged.
+	 * The default threshold (90\B0) means all triangles, as long as they're a little bit visible, are merged.
 	 *
 	 * @param[in] merge_threshold View-angle merge threshold, in degrees, from 0 to 90.
 	 */
@@ -169,7 +315,7 @@ public:
 		visibility_counter = cv::Mat::zeros(512, 512, CV_32SC1);
 		merged_isomap = cv::Mat::zeros(512, 512, CV_32FC4);
 
-		// map 0ฐ to 255, 90ฐ to 0:
+		// map 0\B0 to 255, 90\B0 to 0:
 		float alpha_thresh = (-255.f / 90.f) * merge_threshold + 255.f;
 		if (alpha_thresh < 0.f) // could maybe happen due to float inaccuracies / rounding?
 			alpha_thresh = 0.0f;
