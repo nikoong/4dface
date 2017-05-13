@@ -47,7 +47,9 @@
 
 #include <vector>
 #include <iostream>
-
+#include <string>
+#include <fstream>
+#include <ios>
 using namespace eos;
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;
@@ -60,6 +62,8 @@ using std::cout;
 using std::endl;
 using std::vector;
 using std::string;
+using std::fstream;
+
 
 void draw_axes_topright(float r_x, float r_y, float r_z, cv::Mat image);
 
@@ -100,14 +104,15 @@ int main(int argc, char *argv[])
 			cout << desc;
 			return EXIT_FAILURE;
 		}
-		po::notify(vm);
-	}
+		po::notify(vm);        
+        //cout << vm["input"].as<fs::path>() << endl;
+	}//try
 	catch (const po::error& e) {
 		cout << "Error while parsing command-line arguments: " << e.what() << endl;
 		cout << "Use --help to display a list of options." << endl;
 		return EXIT_FAILURE;
 	}
-
+        
 	// Load the Morphable Model and the LandmarkMapper:
 	morphablemodel::MorphableModel morphable_model = morphablemodel::load_model(modelfile.string());
 	core::LandmarkMapper landmark_mapper = mappingsfile.empty() ? core::LandmarkMapper() : core::LandmarkMapper(mappingsfile);
@@ -152,14 +157,19 @@ int main(int argc, char *argv[])
 	cv::namedWindow("video", 1);
 	cv::namedWindow("render", 1);
 
-	Mat frame, unmodified_frame;
+	Mat frame, unmodified_frame,frame_front;
 
 	bool have_face = false;
 	rcr::LandmarkCollection<Vec2f> current_landmarks;
 	Rect current_facebox;
 	WeightedIsomapAveraging isomap_averaging(60.f); // merge all triangles that are facing <60\B0 towards the camera
 	PcaCoefficientMerging pca_shape_merging;
-
+    //open out file stream
+    std::fstream outfile; 
+    string textname = inputvideo.string();
+    textname += ".txt";
+    cout << textname << endl;    
+    outfile.open(textname , std::fstream::out |std::fstream::trunc);
 	for (;;)
 	{
 		cap >> frame; // get a new frame from camera
@@ -174,6 +184,7 @@ int main(int argc, char *argv[])
 		}
 
 		unmodified_frame = frame.clone();
+        frame_front = frame.clone();
 
 		if (!have_face) {
 			// Run the face detector and obtain the initial estimate using the mean landmarks:
@@ -200,7 +211,7 @@ int main(int argc, char *argv[])
 			auto enclosing_bbox = get_enclosing_bbox(rcr::to_row(current_landmarks));
 			enclosing_bbox = make_bbox_square(enclosing_bbox);
 			current_landmarks = rcr_model.detect(unmodified_frame, enclosing_bbox);
-			rcr::draw_landmarks(frame, current_landmarks, { 255, 0, 0 }); // blue, the new optimised landmarks
+			//rcr::draw_landmarks(frame, current_landmarks, { 255, 0, 0 }); // blue, the new optimised landmarks
 		}
 
 		// Fit the 3DMM:
@@ -211,10 +222,22 @@ int main(int argc, char *argv[])
 		std::tie(mesh, rendering_params) = fitting::fit_shape_and_pose(morphable_model, blendshapes, rcr_to_eos_landmark_collection(current_landmarks), landmark_mapper, unmodified_frame.cols, unmodified_frame.rows, edge_topology, ibug_contour, model_contour, 3, 5, 15.0f, boost::none, shape_coefficients, blendshape_coefficients, image_points);
 
 		// Draw the 3D pose of the face:
-		draw_axes_topright(glm::eulerAngles(rendering_params.get_rotation())[0], glm::eulerAngles(rendering_params.get_rotation())[1], glm::eulerAngles(rendering_params.get_rotation())[2], frame);
-		
+		draw_axes_topright(glm::eulerAngles(rendering_params.get_rotation())[0], glm::eulerAngles(rendering_params.get_rotation())[1], glm::eulerAngles(rendering_params.get_rotation())[2], frame); 
+        //print 3 eulerangles(pitch yaw roll) and save them:
+		//std::cout <<"pitch "<< glm::eulerAngles(rendering_params.get_rotation())[0]*180.0/CV_PI 
+          //        <<" yaw "<< glm::eulerAngles(rendering_params.get_rotation())[1]*180.0/CV_PI 
+            //      <<" roll "<< glm::eulerAngles(rendering_params.get_rotation())[2]*180.0/CV_PI
+              //    << std::endl;
+
+        
+        outfile <<"pitch "<< glm::eulerAngles(rendering_params.get_rotation())[0]*180.0/CV_PI 
+                  <<" yaw "<< glm::eulerAngles(rendering_params.get_rotation())[1]*180.0/CV_PI 
+                  <<" roll "<< glm::eulerAngles(rendering_params.get_rotation())[2]*180.0/CV_PI
+                  << std::endl;
+        
 		// Wireframe rendering of mesh of this frame (non-averaged):
-		draw_wireframe(frame, mesh, rendering_params.get_modelview(), rendering_params.get_projection(), fitting::get_opencv_viewport(frame.cols, frame.rows));
+        //draw_wireframe(frame, mesh, rendering_params.get_modelview(), rendering_params.get_projection(), fitting::get_opencv_viewport(frame.cols, frame.rows));
+
 
 		// Extract the texture using the fitted mesh from this frame:
 		Mat affine_cam = fitting::get_3x4_affine_camera_matrix(rendering_params, frame.cols, frame.rows);
@@ -229,15 +252,37 @@ int main(int argc, char *argv[])
 
 		// Render the model in a separate window using the estimated pose, shape and merged texture:
 		Mat rendering;
-		auto modelview_no_translation = rendering_params.get_modelview();
-		modelview_no_translation[3][0] = 0;
-		modelview_no_translation[3][1] = 0;
-		std::tie(rendering, std::ignore) = render::render(merged_mesh, modelview_no_translation, glm::ortho(-130.0f, 130.0f, -130.0f, 130.0f), 256, 256, render::create_mipmapped_texture(merged_isomap), true, false, false);
-		cv::imshow("render", rendering);
+    
+  		//auto modelview_no_translation = rendering_params.get_modelview();
+		//modelview_no_translation[3][0] = 0;
+		//modelview_no_translation[3][1] = 0;
+        
 
+        glm::mat4x4 modelview_no_translation = glm::mat4x4(1.0,0.0,0.0,0.0,
+                                               0.0,1.0,0.0,0.0,
+                                               0.0,0.0,1.0,0.0,
+                                               0.0,0.0,0.0,1.0                    
+                                             );
+
+		std::tie(rendering, std::ignore) = render::render(merged_mesh, modelview_no_translation, glm::ortho(-130.0f, 130.0f, -130.0f, 130.0f), 256, 256, render::create_mipmapped_texture(merged_isomap), true, false, false);
+        ;
+////test
+        
+        cv::Mat pic = composefront(frame_front, mesh, rendering_params.get_modelview(), rendering_params.get_projection(), fitting::get_opencv_viewport(frame.cols, frame.rows),rendering);
+
+        cv::imshow("test",pic);
+        cv::imshow("render", rendering);
 		cv::imshow("video", frame);
-		auto key = cv::waitKey(30);
+        
+		char key = (char)cv::waitKey(30);
 		if (key == 'q') break;
+
+        if (key == 'e'){
+            string frontpic = inputvideo.string();
+            frontpic += "_front.jpg";
+            cv::imwrite(frontpic, rendering);
+        }
+
 		if (key == 'r') {
 			have_face = false;
 			isomap_averaging = WeightedIsomapAveraging(60.f);
@@ -248,8 +293,8 @@ int main(int argc, char *argv[])
 			render::write_textured_obj(neutral_expression, "current_merged.obj");
 			cv::imwrite("current_merged.isomap.png", merged_isomap);
 		}
-	}
-
+	}//if{;;}
+    outfile.close();
 	return EXIT_SUCCESS;
 };
 
@@ -285,4 +330,38 @@ void draw_axes_topright(float r_x, float r_y, float r_z, cv::Mat image)
 	cv::line(image, cv::Point2f{ o_2d.x, o_2d.y }, cv::Point2f{ x_2d.x, x_2d.y }, { 0, 0, 255 });
 	cv::line(image, cv::Point2f{ o_2d.x, o_2d.y }, cv::Point2f{ y_2d.x, y_2d.y }, { 0, 255, 0 });
 	cv::line(image, cv::Point2f{ o_2d.x, o_2d.y }, cv::Point2f{ z_2d.x, z_2d.y }, { 255, 0, 0 });
+    
+    auto r_x_angle = r_x*180.0/CV_PI;
+    auto r_y_angle = r_y*180.0/CV_PI;
+    auto r_z_angle = r_z*180.0/CV_PI;
+
+    string text_x = std::to_string(r_x_angle);
+    string text_y = std::to_string(r_y_angle);
+    string text_z = std::to_string(r_z_angle);
+    string text_orientation;
+    if(r_x_angle < -20&&r_y_angle < -20) text_orientation = "left up";
+    else if(r_x_angle < -20&&r_y_angle > -20&&r_y_angle < 20) text_orientation = " up";
+    else if(r_x_angle < -20&&r_y_angle > 20) text_orientation = "right up";
+    else if(r_x_angle > -20&&r_x_angle < 20&&r_y_angle < -20) text_orientation = "left ";
+    else if(r_x_angle > -20&&r_x_angle < 20&&r_y_angle > -20&&r_y_angle < 20) text_orientation = "front";
+    else if(r_x_angle > -20&&r_x_angle < 20&&r_y_angle > 20) text_orientation = "right";
+    else if(r_x_angle > 20&&r_y_angle < -20) text_orientation = "left down";
+    else if(r_x_angle > 20&&r_y_angle > -20&&r_y_angle < 20) text_orientation = "down";
+    else if(r_x_angle > 20&&r_y_angle > 20) text_orientation = "right down";
+    int fontFace = cv::FONT_HERSHEY_COMPLEX_SMALL;
+    double fontScale = 1;
+    int thickness = 3;  
+    cv::Point2f textOrg_x(10, 50);
+    cv::Point2f textOrg_y(10, 100);
+    cv::Point2f textOrg_z(10, 150);
+    cv::Point2f textOrg_orientation(10, 200);
+    cv::putText(image, text_x, textOrg_x, fontFace, fontScale, {255,0,0},thickness,8);
+    cv::putText(image, text_y, textOrg_y, fontFace, fontScale, {255,0,0},thickness,8);
+    cv::putText(image, text_z, textOrg_z, fontFace, fontScale, {255,0,0},thickness,8);
+    cv::putText(image, text_orientation, textOrg_orientation, fontFace, fontScale, {255,0,0},thickness,8);
+    
+
+    
 };
+
+

@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
 	bool have_face = false;
 	rcr::LandmarkCollection<Vec2f> current_landmarks;
 	Rect current_facebox;
-	WeightedIsomapAveraging isomap_averaging(60.f); // merge all triangles that are facing <60\B0 towards the camera
+	WeightedIsomapAveraging isomap_averaging(60.f); // merge all triangles that are facing <60° towards the camera
 	PcaCoefficientMerging pca_shape_merging;
 
 	for (;;)
